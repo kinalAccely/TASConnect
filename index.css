@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #f23c39;
+  --brand-dark: #d6332f;
+  --brand-light: #fee0de;
+  --brand-lighter: #fff5f4;
+  --brand-shadow-strong: rgba(242, 60, 57, 0.35);
+  --brand-shadow-soft: rgba(242, 60, 57, 0.12);
+}
+
+.fade-slide-in {
+  animation: fadeSlideIn 0.35s ease-out forwards;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
