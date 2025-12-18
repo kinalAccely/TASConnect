@@ -368,6 +368,7 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
   const [sources, setSources] = React.useState([]);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [toolScanVersion, setToolScanVersion] = React.useState(0);
+  const [assistantSelectionKey, setAssistantSelectionKey] = React.useState(null);
   const [theme, setTheme] = React.useState(() => {
     if (typeof window === "undefined") {
       return "light";
@@ -384,20 +385,59 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
   const previousToolCountRef = React.useRef(0);
   const transitionTimeoutRef = React.useRef(null);
   const [isThreadTransitioning, setIsThreadTransitioning] = React.useState(false);
-  const resolvedAssistantId = React.useMemo(
-    () => resolveAssistantId(activeTab) ?? DEFAULT_ASSISTANT_ID,
-    [activeTab],
+  const assistantQuickOptions = React.useMemo(
+    () => [
+      {
+        id: "Chat",
+        label: "Chat",
+        description: "General workspace assistant",
+        assistantId: resolveAssistantId("Chat"),
+      },
+      {
+        id: "Training",
+        label: "Training",
+        description: "Training module assistant",
+        assistantId: resolveAssistantId("Training"),
+      },
+      {
+        id: "Live Demo",
+        label: "Live Demo",
+        description: "Live demo assistant",
+        assistantId: resolveAssistantId("Live Demo"),
+      },
+    ],
+    [],
   );
+
+  const selectedAssistantOption = React.useMemo(() => {
+    if (!assistantSelectionKey) {
+      return null;
+    }
+    const normalizedKey = assistantSelectionKey.toLowerCase();
+    return (
+      assistantQuickOptions.find(
+        (option) => option.id.toLowerCase() === normalizedKey,
+      ) ?? null
+    );
+  }, [assistantSelectionKey, assistantQuickOptions]);
+
+  const resolvedAssistantId = React.useMemo(
+    () =>
+      selectedAssistantOption?.assistantId ??
+      resolveAssistantId(activeTab) ??
+      DEFAULT_ASSISTANT_ID,
+    [selectedAssistantOption, activeTab],
+  );
+  const selectedAssistantKey = selectedAssistantOption?.id ?? null;
   const [resolvedGraphId, setResolvedGraphId] = React.useState(
     DEFAULT_ASSISTANT_ID,
   );
-  const resolvedStreamModes = React.useMemo(
-    () =>
-      activeTab === "Training"
-        ? TRAINING_STREAM_MODES
-        : DEFAULT_STREAM_MODES,
-    [activeTab],
-  );
+  const resolvedStreamModes = React.useMemo(() => {
+    const comparisonKey = selectedAssistantKey ?? activeTab;
+    return comparisonKey === "Training"
+      ? TRAINING_STREAM_MODES
+      : DEFAULT_STREAM_MODES;
+  }, [selectedAssistantKey, activeTab]);
 
   const storeActiveRunMeta = React.useCallback(
     (runMeta) => {
@@ -439,6 +479,10 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
     if (activeTab !== "Live Demo") {
       setLiveDemoSteps(LIVE_DEMO_STEPS);
     }
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    setAssistantSelectionKey((prev) => (prev ? null : prev));
   }, [activeTab]);
 
   React.useEffect(() => {
@@ -832,6 +876,35 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
     ];
   }, [activeTabMessages, isLoading, streamValues]);
 
+  const hasUserMessages = React.useMemo(
+    () => normalizedMessages.some((message) => message?.role === "user"),
+    [normalizedMessages],
+  );
+
+  const shouldShowAssistantQuickOptions = React.useMemo(() => {
+    if (activeThreadId) {
+      return false;
+    }
+    if (hasUserMessages) {
+      return false;
+    }
+    if (typeof input !== "string" || input.length === 0) {
+      return false;
+    }
+
+    const normalizedInput = input.trimStart();
+    if (normalizedInput.startsWith("/")) {
+      return true;
+    }
+
+    const trimmedInput = input.trim();
+    if (!trimmedInput) {
+      return false;
+    }
+
+    return /\s\/$/.test(trimmedInput);
+  }, [activeThreadId, hasUserMessages, input]);
+
   const { stage, stageProgress } = React.useMemo(
     () => resolveStageFromValues(streamValues),
     [streamValues],
@@ -854,6 +927,8 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
     setInput("");
     setSources([]);
     setRefreshKey((prev) => prev + 1);
+    setAssistantSelectionKey(null);
+    setResolvedGraphId(resolveAssistantId(activeTab) ?? DEFAULT_ASSISTANT_ID);
     resetToolTracking();
     if (typeof onNavigate === "function") {
       const basePath =
@@ -864,7 +939,17 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
             : "/chat";
       onNavigate(basePath);
     }
-  }, [activeTab, isLoading, stop, resetToolTracking, onNavigate, triggerThreadTransition]);
+  }, [
+    activeTab,
+    isLoading,
+    stop,
+    resetToolTracking,
+    onNavigate,
+    triggerThreadTransition,
+    setAssistantSelectionKey,
+    setResolvedGraphId,
+    resolveAssistantId,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -1157,6 +1242,47 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
     [onNavigate, selectedChatId],
   );
 
+  const handleAssistantQuickOptionSelect = React.useCallback(
+    (optionId) => {
+      if (isLoading) {
+        return;
+      }
+      if (typeof optionId !== "string") {
+        return;
+      }
+      const normalizedKey = optionId.trim();
+      if (!normalizedKey) {
+        return;
+      }
+
+      const selection =
+        assistantQuickOptions.find(
+          (option) => option.id.toLowerCase() === normalizedKey.toLowerCase(),
+        ) ?? null;
+
+      setAssistantSelectionKey(selection?.id ?? null);
+      setInput("");
+      resetToolTracking();
+      setActiveThreadId(null);
+      if (selection?.assistantId) {
+        setResolvedGraphId(selection.assistantId);
+      } else {
+        setResolvedGraphId(resolveAssistantId(activeTab) ?? DEFAULT_ASSISTANT_ID);
+      }
+    },
+    [
+      activeTab,
+      assistantQuickOptions,
+      isLoading,
+      resetToolTracking,
+      setAssistantSelectionKey,
+      setActiveThreadId,
+      setInput,
+      setResolvedGraphId,
+      resolveAssistantId,
+    ],
+  );
+
   return (
     <div className={containerClassName}>
       <div className="flex h-full w-full min-h-0 max-w-8xl flex-col gap-4">
@@ -1201,6 +1327,10 @@ export default function workSpaceLayout({ onNavigate, chatId, initialTab = "Chat
             stage={stage}
             stageProgress={stageProgress ?? 0}
             isTransitioning={isThreadTransitioning}
+            showAssistantOptions={shouldShowAssistantQuickOptions}
+            assistantOptions={assistantQuickOptions}
+            selectedAssistantId={selectedAssistantKey}
+            onAssistantOptionSelect={handleAssistantQuickOptionSelect}
           />
 
           <RightSidebar

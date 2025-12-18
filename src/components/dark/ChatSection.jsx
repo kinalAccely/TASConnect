@@ -301,6 +301,10 @@ export default function ChatSection({
   onStop,
   onLiveDemoStepsChange,
   isTransitioning = false,
+  assistantOptions = [],
+  showAssistantOptions = false,
+  onAssistantOptionSelect,
+  selectedAssistantId = null,
 }) {
   const [stageHistory, setStageHistory] = React.useState([]);
   const prevStageRef = React.useRef();
@@ -308,6 +312,41 @@ export default function ChatSection({
   const [copiedMessageKey, setCopiedMessageKey] = React.useState(null);
   const copyTimeoutRef = React.useRef();
   const isLiveDemo = activeTab === "Live Demo";
+
+  const assistantOptionList = React.useMemo(
+    () =>
+      Array.isArray(assistantOptions)
+        ? assistantOptions
+            .filter((option) => option && typeof option.id === "string")
+            .map((option) => {
+              const normalizedId = option.id.trim();
+              if (!normalizedId) {
+                return null;
+              }
+              return {
+                id: normalizedId,
+                label:
+                  typeof option.label === "string" && option.label.trim().length > 0
+                    ? option.label.trim()
+                    : normalizedId,
+                description:
+                  typeof option.description === "string" ? option.description : "",
+              };
+            })
+            .filter(Boolean)
+        : [],
+    [assistantOptions],
+  );
+
+  const handleAssistantOptionSelect = React.useCallback(
+    (optionId) => {
+      if (typeof onAssistantOptionSelect !== "function") {
+        return;
+      }
+      onAssistantOptionSelect(optionId);
+    },
+    [onAssistantOptionSelect],
+  );
 
   const markdownComponents = React.useMemo(
     () => ({
@@ -812,6 +851,40 @@ export default function ChatSection({
         )}
 
         <div className="border-t border-zinc-200 bg-white px-5 py-3">
+          {showAssistantOptions && assistantOptionList.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {assistantOptionList.map((option) => {
+                const isActive =
+                  typeof selectedAssistantId === "string" &&
+                  selectedAssistantId.toLowerCase() === option.id.toLowerCase();
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => handleAssistantOptionSelect(option.id)}
+                    className={`flex min-w-[9rem] flex-col gap-0.5 rounded-2xl border px-3 py-2 text-left text-[11px] shadow-[0_8px_18px_rgba(8,47,73,0.35)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${
+                      isActive
+                        ? "border-sky-500/70 bg-slate-800/80 text-sky-200"
+                        : "border-slate-700 bg-slate-900/80 text-slate-300 hover:border-sky-500/60 hover:text-sky-200"
+                    }`}
+                  >
+                    <span className="text-[11.5px] font-semibold text-slate-100">
+                      {option.label}
+                    </span>
+                    {option.description ? (
+                      <span className="text-[10px] text-slate-400">{option.description}</span>
+                    ) : null}
+                    {isActive ? (
+                      <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-200">
+                        Selected
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <input
               value={input}
